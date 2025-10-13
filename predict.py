@@ -36,7 +36,7 @@ all_references = []
 for i, idx in enumerate(example_indices, 1):
     example = test_data[idx]
 
-    prompt = "Translate into plain language for a general audience: "
+    prompt = "Simplify this medical report for a patient. Replace technical terms with everyday words and explain what they mean: "
     input_text = prompt + example['radiology_report']
 
     # Tokenize

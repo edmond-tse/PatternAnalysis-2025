@@ -18,7 +18,7 @@ class BioLaySumm(Dataset):
 
     def __getitem__(self, idx):
         item = self.data[idx]
-        prompt = "Translate into plain language for a general audience: "
+        prompt = "Simplify this medical report for a patient. Replace technical terms with everyday words and explain what they mean: "
 
         inputs = self.tokenizer(
             prompt + item['radiology_report'],

@@ -42,7 +42,6 @@ print("Loading dataset...")
 data = load_dataset("BioLaySumm/BioLaySumm2025-LaymanRRG-opensource-track")
 
 # Create datasets
-#train_dataset = BioLaySumm(data["train"].select(range(15000)), tokenizer, MAX_LENGTH)
 train_dataset = BioLaySumm(data["train"].select(range(30000)), tokenizer, MAX_LENGTH)
 val_dataset = BioLaySumm(data["validation"], tokenizer, MAX_LENGTH)
 

@@ -12,6 +12,7 @@ from datasets import load_dataset
 from torch.utils.data import DataLoader
 from evaluate import load
 
+torch.backends.cudnn.benchmark = True
 # Configuration
 USE_LORA = True
 LORA_R = 16
@@ -31,6 +32,7 @@ model_wrapper = ModelWrapper(
 )
 model = model_wrapper.get_model()
 model.to(device)
+model.compile()
 print(f"Model loaded. LoRA: {model_wrapper.is_using_lora()}")
 
 # Load tokenizer
@@ -73,14 +75,15 @@ def train(model, loader, optimizer, device):
         attention_mask = batch['attention_mask'].to(device)
         labels = batch['labels'].to(device)
 
-        outputs = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=labels
-        )
-        loss = outputs.loss
+        with torch.autocast(device_type=device):
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels
+            )
+            loss = outputs.loss
 
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
 
@@ -101,11 +104,12 @@ def validate(model, loader, device):
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
 
-            outputs = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                labels=labels
-            )
+            with torch.autocast(device_type=device):
+                outputs = model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=labels
+                )
 
             total_loss += outputs.loss.item()
 

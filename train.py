@@ -6,6 +6,7 @@ import torch
 import matplotlib.pyplot as plt
 import os
 import time
+from torch.cuda.amp import autocast, GradScaler
 from modules import ModelWrapper, get_device, get_tokenizer, save_model
 from dataset import BioLaySumm
 from datasets import load_dataset
@@ -56,7 +57,6 @@ val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
 print("Setup complete!")
 
-# Show trainable parameters
 trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 total_params = sum(p.numel() for p in model.parameters())
 print(f"Trainable: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
@@ -64,9 +64,10 @@ print(f"Trainable: {trainable_params:,} / {total_params:,} ({100 * trainable_par
 EPOCHS = 5
 LEARNING_RATE = 5e-5
 optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
+scaler = GradScaler()
 
 
-def train(model, loader, optimizer, device):
+def train(model, loader, optimizer, device, scaler):
     model.train()
     total_loss = 0
 
@@ -76,16 +77,19 @@ def train(model, loader, optimizer, device):
         attention_mask = batch['attention_mask'].to(device)
         labels = batch['labels'].to(device)
 
-        outputs = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=labels
-        )
-        loss = outputs.loss
-
         optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        optimizer.step()
+
+        with autocast():
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels
+            )
+            loss = outputs.loss
+
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         total_loss += loss.item()
         end = time.time()
@@ -134,7 +138,7 @@ for epoch in range(EPOCHS):
     print("-" * 60)
 
     # Train
-    train_loss = train(model, train_loader, optimizer, device)
+    train_loss = train(model, train_loader, optimizer, device, scaler)
     train_losses.append(train_loss)
     print(f"  Train Loss: {train_loss:.4f}")
 

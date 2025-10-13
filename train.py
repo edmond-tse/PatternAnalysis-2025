@@ -62,7 +62,7 @@ total_params = sum(p.numel() for p in model.parameters())
 print(f"Trainable: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
 
 EPOCHS = 5
-LEARNING_RATE = 5e-5
+LEARNING_RATE = 5e-4
 optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
 

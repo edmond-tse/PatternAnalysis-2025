@@ -42,7 +42,8 @@ print("Loading dataset...")
 data = load_dataset("BioLaySumm/BioLaySumm2025-LaymanRRG-opensource-track")
 
 # Create datasets
-train_dataset = BioLaySumm(data["train"].select(range(15000)), tokenizer, MAX_LENGTH)
+#train_dataset = BioLaySumm(data["train"].select(range(15000)), tokenizer, MAX_LENGTH)
+train_dataset = BioLaySumm(data["train"].select(range(30000)), tokenizer, MAX_LENGTH)
 val_dataset = BioLaySumm(data["validation"], tokenizer, MAX_LENGTH)
 
 print(f"Train samples: {len(train_dataset)}")
@@ -154,5 +155,44 @@ print("\n" + "=" * 60)
 print("Evaluating on Test Set")
 print("=" * 60)
 
+# Create test dataset and loader
+test_dataset = BioLaySumm(data["test"], tokenizer, MAX_LENGTH)
+test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
+print(f"Test samples: {len(test_dataset)}")
+
+# Calculate test loss
+test_loss = validate(model, test_loader, device)
+print(f"Test Loss: {test_loss:.4f}")
+
+# Calculate ROUGE scores
+print("\nCalculating ROUGE scores...")
+rouge = load("rouge")
+
+model.eval()
+predictions = []
+references = []
+
+with torch.no_grad():
+    for batch_idx, batch in enumerate(test_loader):
+        if batch_idx >= 100:
+            break
+
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+
+        # Generate predictions
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            max_length=MAX_LENGTH,
+            num_beams=4
+        )
+
+        # Decode predictions and references
+        batch_predictions = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        batch_references = tokenizer.batch_decode(batch['labels'], skip_special_tokens=True)
+
+        predictions.extend(batch_predictions)
+        references.extend(batch_references)
 
 

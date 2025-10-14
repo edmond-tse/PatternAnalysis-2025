@@ -14,7 +14,7 @@ print(f"Using device: {device}")
 
 # Load trained model
 print("\nLoading trained model...")
-model, tokenizer = load_model('./saved_model', device)
+model, tokenizer = load_model('./Model_1', device)
 print("Model loaded successfully!")
 
 print("\nLoading validation dataset...")
@@ -28,6 +28,7 @@ print("EXAMPLE PREDICTIONS")
 print("=" * 80)
 
 example_indices = [0, 10, 50, 100, 200]
+#example_indices = list(range(20))
 
 model.eval()
 all_predictions = []

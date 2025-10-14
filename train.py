@@ -147,6 +147,12 @@ for epoch in range(EPOCHS):
     val_losses.append(val_loss)
     print(f"  Val Loss:   {val_loss:.4f}")
 
+    # checkpoint
+    checkpoint_dir = f'./checkpoint_epoch_{epoch + 1}'
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    save_model(model, tokenizer, checkpoint_dir)
+    print(f"  Checkpoint saved to {checkpoint_dir}/")
+
 end_time = time.time()
 training_time = end_time - start_time
 hours = int(training_time // 3600)

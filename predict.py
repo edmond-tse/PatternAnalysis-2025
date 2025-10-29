@@ -14,7 +14,7 @@ print(f"Using device: {device}")
 
 # Load trained model
 print("\nLoading trained model...")
-model, tokenizer = load_model('./Model_1', device)
+model, tokenizer = load_model('./Model_3', device)
 print("Model loaded successfully!")
 
 print("\nLoading validation dataset...")
@@ -27,8 +27,8 @@ print("\n" + "=" * 80)
 print("EXAMPLE PREDICTIONS")
 print("=" * 80)
 
-example_indices = [0, 10, 50, 100, 200]
-#example_indices = list(range(20))
+# example_indices = [0, 10, 50, 100, 200]
+example_indices = list(range(50))
 
 model.eval()
 all_predictions = []
@@ -54,7 +54,9 @@ for i, idx in enumerate(example_indices, 1):
             **inputs,
             max_length=512,
             num_beams=4,
-            early_stopping=True
+            early_stopping=True,
+            repetition_penalty=1.2,
+            no_repeat_ngram_size=3
         )
 
     # Decode
@@ -73,9 +75,9 @@ for i, idx in enumerate(example_indices, 1):
     all_references.append(reference)
 
     # Print example
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"EXAMPLE {i}")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
     print(f"\nInput (Radiology Report):")
     print(f"{example['radiology_report']}")
     print(f"\nReference (Ground Truth Layman Report):")
@@ -88,9 +90,9 @@ for i, idx in enumerate(example_indices, 1):
     print(f"  ROUGE-L: {rouge_scores['rougeL']:.4f}")
 
 # Calculate average ROUGE across all examples
-print(f"\n{'='*80}")
+print(f"\n{'=' * 80}")
 print("OVERALL METRICS (5 examples)")
-print(f"{'='*80}")
+print(f"{'=' * 80}")
 
 overall_rouge = rouge_metric.compute(
     predictions=all_predictions,

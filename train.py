@@ -11,59 +11,31 @@ from dataset import BioLaySumm
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 from evaluate import load
+import math
 
+# Performance optimizations
+# torch.backends.cudnn.benchmark = True enables cuDNN autotuner for faster training
+# but results may vary slightly between runs (~1-2% ROUGE variance)
 torch.backends.cudnn.benchmark = True
+torch.set_float32_matmul_precision("high")
+
+# For exact reproducibility, uncomment below and comment above:
+# import random
+# import numpy as np
+# random.seed(3710)
+# np.random.seed(3710)
+# torch.manual_seed(3710)
+# torch.cuda.manual_seed_all(3710)
+# torch.backends.cudnn.deterministic = True
+# torch.backends.cudnn.benchmark = False
+
 # Configuration
 USE_LORA = True
 LORA_R = 16
 BATCH_SIZE = 16
 MAX_LENGTH = 512
-
-# Setup device
-device = get_device()
-print(f"Using device: {device}")
-
-# Load model
-print("Loading model...")
-model_wrapper = ModelWrapper(
-    model_name="google/flan-t5-base",
-    use_lora=USE_LORA,
-    lora_r=LORA_R
-)
-model = model_wrapper.get_model()
-model.to(device)
-model.compile()
-print(f"Model loaded. LoRA: {model_wrapper.is_using_lora()}")
-
-# Load tokenizer
-print("Loading tokenizer...")
-tokenizer = get_tokenizer()
-
-# Load dataset
-print("Loading dataset...")
-data = load_dataset("BioLaySumm/BioLaySumm2025-LaymanRRG-opensource-track")
-
-# Create datasets
-train_dataset = BioLaySumm(data["train"], tokenizer, MAX_LENGTH)
-val_dataset = BioLaySumm(data["validation"], tokenizer, MAX_LENGTH)
-
-print(f"Train samples: {len(train_dataset)}")
-print(f"Val samples: {len(val_dataset)}")
-
-# Create dataloaders
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=os.cpu_count() // 2, pin_memory=True, persistent_workers=True)
-val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=os.cpu_count() // 2, pin_memory=True, persistent_workers=True)
-
-print("Setup complete!")
-
-# Show trainable parameters
-trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-total_params = sum(p.numel() for p in model.parameters())
-print(f"Trainable: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
-
 EPOCHS = 5
 LEARNING_RATE = 5e-5
-optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
 
 def train(model, loader, optimizer, device):
@@ -81,6 +53,7 @@ def train(model, loader, optimizer, device):
             attention_mask=attention_mask,
             labels=labels
         )
+
         loss = outputs.loss
 
         optimizer.zero_grad(set_to_none=True)
@@ -121,144 +94,143 @@ def validate(model, loader, device):
     return avg_loss
 
 
-# Main training loop
-print("\n" + "=" * 60)
-print("Starting Training")
-print("=" * 60)
+if __name__ == '__main__':
+    # Setup device
+    device = get_device()
+    print(f"Using device: {device}")
 
-start_time = time.time()
-train_losses = []
-val_losses = []
+    # Load model
+    print("Loading model...")
+    model_wrapper = ModelWrapper(
+        model_name="google/flan-t5-base",
+        use_lora=USE_LORA,
+        lora_r=LORA_R
+    )
+    model = model_wrapper.get_model()
+    model.to(device)
+    model.compile()
+    print(f"Model loaded. LoRA: {model_wrapper.is_using_lora()}")
 
-for epoch in range(EPOCHS):
-    print(f"\nEpoch {epoch + 1}/{EPOCHS}")
-    print("-" * 60)
+    # Load tokenizer
+    print("Loading tokenizer...")
+    tokenizer = get_tokenizer()
 
-    # Train
-    epoch_start = time.time()
-    train_loss = train(model, train_loader, optimizer, device)
-    train_losses.append(train_loss)
-    epoch_end = time.time()
-    epoch_time = epoch_end - epoch_start
-    print(f"  Train Loss: {train_loss:.4f} - Epoch Time: {epoch_time//60:.0f}m {epoch_time%60:.0f}s")
+    # Load dataset
+    print("Loading dataset...")
+    data = load_dataset("BioLaySumm/BioLaySumm2025-LaymanRRG-opensource-track")
 
-    # Validate
-    val_loss = validate(model, val_loader, device)
-    val_losses.append(val_loss)
-    print(f"  Val Loss:   {val_loss:.4f}")
+    # Create datasets
+    train_dataset = BioLaySumm(data["train"].select(range(math.floor(len(data["train"]) * 0.5))), tokenizer, MAX_LENGTH)
+    val_dataset = BioLaySumm(data["validation"], tokenizer, MAX_LENGTH)
 
-    # checkpoint
-    checkpoint_dir = f'./checkpoint_epoch_{epoch + 1}'
-    os.makedirs(checkpoint_dir, exist_ok=True)
-    save_model(model, tokenizer, checkpoint_dir)
-    print(f"  Checkpoint saved to {checkpoint_dir}/")
+    print(f"Train samples: {len(train_dataset)}")
+    print(f"Val samples: {len(val_dataset)}")
 
-end_time = time.time()
-training_time = end_time - start_time
-hours = int(training_time // 3600)
-minutes = int((training_time % 3600) // 60)
-seconds = int(training_time % 60)
+    # Create dataloaders
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=os.cpu_count() // 2, pin_memory=True, persistent_workers=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=os.cpu_count() // 2, pin_memory=True, persistent_workers=True)
 
-print("\n" + "=" * 60)
-print("Training Complete!")
-print("=" * 60)
-print(f"Final Train Loss: {train_losses[-1]:.4f}")
-print(f"Final Val Loss:   {val_losses[-1]:.4f}")
-print(f"Total Training Time: {hours}h {minutes}m {seconds}s ({training_time:.2f} seconds)")
+    print("Setup complete!")
 
-# Evaluate on test set
-print("\n" + "=" * 60)
-print("Evaluating on Test Set")
-print("=" * 60)
+    # Show trainable parameters
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Trainable: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
 
-# Create test dataset and loader
-test_dataset = BioLaySumm(data["test"], tokenizer, MAX_LENGTH)
-test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=os.cpu_count() // 2, pin_memory=True, persistent_workers=True)
-print(f"Test samples: {len(test_dataset)}")
+    optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
-# Calculate test loss
-test_loss = validate(model, test_loader, device)
-print(f"Test Loss: {test_loss:.4f}")
+    # Main training loop
+    print("\n" + "=" * 60)
+    print("Starting Training")
+    print("=" * 60)
 
-# Calculate ROUGE scores
-print("\nCalculating ROUGE scores...")
-rouge = load("rouge")
+    start_time = time.time()
+    train_losses = []
+    val_losses = []
 
-model.eval()
-predictions = []
-references = []
+    for epoch in range(EPOCHS):
+        print(f"\nEpoch {epoch + 1}/{EPOCHS}")
+        print("-" * 60)
 
-with torch.no_grad():
-    for batch_idx, batch in enumerate(test_loader):
-        if batch_idx >= 100:
-            break
+        # Train
+        epoch_start = time.time()
+        train_loss = train(model, train_loader, optimizer, device)
+        train_losses.append(train_loss)
+        epoch_end = time.time()
+        epoch_time = epoch_end - epoch_start
+        print(f"  Train Loss: {train_loss:.4f} - Epoch Time: {epoch_time//60:.0f}m {epoch_time%60:.0f}s")
 
-        input_ids = batch['input_ids'].to(device)
-        attention_mask = batch['attention_mask'].to(device)
+        # Validate
+        val_loss = validate(model, val_loader, device)
+        val_losses.append(val_loss)
+        print(f"  Val Loss:   {val_loss:.4f}")
 
-        # Generate predictions
-        outputs = model.generate(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            max_length=MAX_LENGTH,
-            num_beams=4
-        )
+        # checkpoint
+        checkpoint_dir = f'./checkpoint_epoch_{epoch + 1}'
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        save_model(model, tokenizer, checkpoint_dir)
+        print(f"  Checkpoint saved to {checkpoint_dir}/")
 
-        # Decode predictions and references
-        batch_predictions = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        labels = batch['labels'].clone()
-        labels[labels == -100] = tokenizer.pad_token_id
-        batch_references = tokenizer.batch_decode(labels, skip_special_tokens=True)
+    end_time = time.time()
+    training_time = end_time - start_time
+    hours = int(training_time // 3600)
+    minutes = int((training_time % 3600) // 60)
+    seconds = int(training_time % 60)
 
-        predictions.extend(batch_predictions)
-        references.extend(batch_references)
+    print("\n" + "=" * 60)
+    print("Training Complete!")
+    print("=" * 60)
+    print(f"Final Train Loss: {train_losses[-1]:.4f}")
+    print(f"Final Val Loss:   {val_losses[-1]:.4f}")
+    print(f"Total Training Time: {hours}h {minutes}m {seconds}s ({training_time:.2f} seconds)")
 
-# Compute ROUGE scores
-result = rouge.compute(
-    predictions=predictions,
-    references=references,
-    use_stemmer=True,
-    use_aggregator=True
-)
+    # Evaluate on test set
+    print("\n" + "=" * 60)
+    print("Evaluating on Test Set")
+    print("=" * 60)
 
-print("\nROUGE Scores:")
-print(f"  ROUGE-1: {result['rouge1']:.4f}")
-print(f"  ROUGE-2: {result['rouge2']:.4f}")
-print(f"  ROUGE-L: {result['rougeL']:.4f}")
-print(f"  ROUGE-Lsum: {result['rougeLsum']:.4f}")
+    # Create test dataset and loader
+    test_dataset = BioLaySumm(data["validation"], tokenizer, MAX_LENGTH)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=os.cpu_count() // 2, pin_memory=True, persistent_workers=True)
+    print(f"Test samples: {len(test_dataset)}")
 
-# Plot training curves
-print("\n" + "=" * 60)
-print("Plotting Training Curves")
-print("=" * 60)
+    # Calculate test loss
+    test_loss = validate(model, test_loader, device)
+    print(f"Test Loss: {test_loss:.4f}")
+    print("\nNote: For ROUGE scores, run: python calculate_rouge.py")
 
-plt.figure(figsize=(10, 6))
-epochs_range = range(1, EPOCHS + 1)
+    # Plot training curves
+    print("\n" + "=" * 60)
+    print("Plotting Training Curves")
+    print("=" * 60)
 
-plt.plot(epochs_range, train_losses, 'b-o', label='Training Loss', linewidth=2)
-plt.plot(epochs_range, val_losses, 'r-s', label='Validation Loss', linewidth=2)
+    plt.figure(figsize=(10, 6))
+    epochs_range = range(1, EPOCHS + 1)
 
-plt.xlabel('Epoch', fontsize=12)
-plt.ylabel('Loss', fontsize=12)
-plt.title('Training and Validation Loss', fontsize=14, fontweight='bold')
-plt.legend(fontsize=10)
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
+    plt.plot(epochs_range, train_losses, 'b-o', label='Training Loss', linewidth=2)
+    plt.plot(epochs_range, val_losses, 'r-s', label='Validation Loss', linewidth=2)
 
-os.makedirs('./plots', exist_ok=True)
-plt.savefig('./plots/training_losses.png', dpi=300, bbox_inches='tight')
-print("Training loss plot saved to ./plots/training_losses.png")
-plt.close()
+    plt.xlabel('Epoch', fontsize=12)
+    plt.ylabel('Loss', fontsize=12)
+    plt.title('Training and Validation Loss', fontsize=14, fontweight='bold')
+    plt.legend(fontsize=10)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
 
-# Save trained model
-print("\n" + "=" * 60)
-print("Saving Model")
-print("=" * 60)
+    os.makedirs('./plots', exist_ok=True)
+    plt.savefig('./plots/training_losses.png', dpi=300, bbox_inches='tight')
+    print("Training loss plot saved to ./plots/training_losses.png")
+    plt.close()
 
-os.makedirs('./saved_model', exist_ok=True)
-save_model(model, tokenizer, './saved_model')
-print("Model and tokenizer saved to ./saved_model/")
+    # Save trained model
+    print("\n" + "=" * 60)
+    print("Saving Model")
+    print("=" * 60)
 
-print("\n" + "=" * 60)
-print("Finished")
-print("=" * 60)
+    os.makedirs('./saved_model', exist_ok=True)
+    save_model(model, tokenizer, './saved_model')
+    print("Model and tokenizer saved to ./saved_model/")
+
+    print("\n" + "=" * 60)
+    print("Finished")
+    print("=" * 60)

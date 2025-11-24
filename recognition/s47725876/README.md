@@ -40,7 +40,7 @@ We evaluate performance based on ROUGE, and human readability assessments.
 **FLAN-T5 (Finetuned Language Net)** is an instruction-tuned variant of T5, trained on 1,800+ tasks, making it effective at following natural language instructions.
 
 
-![img_1.png](img_1.png)
+![img_1.png](./images/img_1.png)
 Figure 1: Transformer Architecture (Vaswani et al., 2017)
 
 
@@ -231,12 +231,12 @@ Note: The ROUGE Scores in the table is the average
 | ROUGE-L                           | 0.6575                  | 0.6555                   |
 | ROUGE-Lsum                        | 0.6575                  | 0.6554                   |
 
-![img_10.png](img_10.png)
+![img_10.png](./images/img_10.png)
 Figure 2: ROUGE Scores Comparison Bar Chart
 
 
 
-![img_9.png](img_9.png)
+![img_9.png](./images/img_9.png)
 Figure 3: Training losses 
 
 #### Example 1
